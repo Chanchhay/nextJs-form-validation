@@ -39,12 +39,33 @@ import {
     SelectValue,
 } from "../ui/select";
 import ImageUpload from "../file-upload/image-upload";
+import { uploadImageToServer } from "@/lib/data/upload-file";
+import { createProduct } from "@/lib/data/create-product";
+import axios from "axios";
 
-const productCategory = [
-    { label: "Smartphone", value: "phone" },
-    { label: "Labtop", value: "labtop" },
-    { label: "Cloth", value: "cloth" },
-] as const;
+interface ImageFile {
+    id: string;
+    file: File;
+    preview: string;
+    progress: number;
+    status: "uploading" | "completed" | "error";
+    error?: string;
+}
+
+// const categories = [
+//     { label: "Clothes", value: 1 },
+//     { label: "Electronics", value: 2 },
+//     { label: "Furniture", value: 3 },
+// ] as const;
+
+type Category = {
+    id: number;
+    name: string;
+    slug: string;
+    image: string;
+};
+
+const baseAPI = process.env.NEXT_PUBLIC_API;
 
 const formSchema = z.object({
     title: z
@@ -56,15 +77,13 @@ const formSchema = z.object({
         .min(20, "Description must be at least 20 characters.")
         .max(100, "Description must be at most 100 characters."),
     price: z.coerce.number().positive(),
-    language: z
-        .string()
-        .min(1, "Please select your spoken language.")
-        .refine((val) => val !== "auto", {
-            message:
-                "Auto-detection is not allowed. Please select a specific language.",
-        }),
-    image: z.instanceof(File, { message: "Please upload an image file." }),
+    categoryId: z.coerce.number().int().positive(),
+    image: z.array(z.string().url()).optional(),
 });
+
+export async function getCategories() {
+    return axios.get(`${baseAPI}/api/v1/categories`);
+}
 
 export function ProductForm() {
     const form = useForm<z.infer<typeof formSchema>>({
@@ -73,26 +92,78 @@ export function ProductForm() {
             title: "",
             description: "",
             price: 0,
-            image: undefined,
+            image: [],
         },
     });
 
-    function onSubmit(data: z.infer<typeof formSchema>) {
-        toast("You submitted the following values:", {
-            description: (
-                <pre className="bg-code text-code-foreground mt-2 w-[320px] overflow-x-auto rounded-md p-4">
-                    <code>{JSON.stringify(data, null, 2)}</code>
-                </pre>
-            ),
-            position: "bottom-right",
-            classNames: {
-                content: "flex flex-col gap-2",
-            },
-            style: {
-                "--border-radius": "calc(var(--radius)  + 4px)",
-            } as React.CSSProperties,
-        });
+    // function onSubmit(data: z.infer<typeof formSchema>) {
+    //     toast("You submitted the following values:", {
+    //         description: (
+    //             <pre className="bg-code text-code-foreground mt-2 w-[320px] overflow-x-auto rounded-md p-4">
+    //                 <code>{JSON.stringify(data, null, 2)}</code>
+    //             </pre>
+    //         ),
+    //         position: "bottom-right",
+    //         classNames: {
+    //             content: "flex flex-col gap-2",
+    //         },
+    //         style: {
+    //             "--border-radius": "calc(var(--radius)  + 4px)",
+    //         } as React.CSSProperties,
+    //     });
+    // }
+
+    // const onhandleImageChange = async (images: ImageFile[]) => {
+    //     const formData = new FormData();
+    //     for (const image of images) {
+    //         formData.append("file", image.file);
+    //         const res = await uploadImageToServer(formData);
+    //         console.log(res);
+    //     }
+    // };
+
+    async function onSubmit(data: z.infer<typeof formSchema>) {
+        try {
+            const fd = new FormData();
+            selectedImages.forEach((img) => fd.append("file", img.file));
+
+            const uploadRes = await uploadImageToServer(fd);
+            const uploaded = uploadRes.data;
+            const imageUrls: string[] = Array.isArray(uploaded)
+                ? uploaded.map((x) => x.location)
+                : [uploaded.location];
+
+            const payload = {
+                title: data.title,
+                price: data.price,
+                description: data.description,
+                categoryId: data.categoryId,
+                images: imageUrls,
+            };
+
+            const created = await createProduct(payload);
+
+            toast.success("Created product", {
+                description: created.data.title,
+            });
+            form.reset();
+            setSelectedImages([]);
+        } catch (e: unknown) {
+            toast.error(e?.response?.data?.message ?? "Create product failed");
+        }
     }
+
+    const [selectedImages, setSelectedImages] = React.useState<ImageFile[]>([]);
+
+    const onhandleImageChange = (images: ImageFile[]) => {
+        setSelectedImages(images);
+    };
+
+    const [categories, setCategories] = React.useState<Category[]>([]);
+
+    React.useEffect(() => {
+        getCategories().then((res) => setCategories(res.data));
+    }, []);
 
     return (
         <Card className="w-full sm:max-w-md">
@@ -189,57 +260,35 @@ export function ProductForm() {
                             )}
                         />
                         <Controller
-                            name="language"
+                            name="categoryId"
                             control={form.control}
-                            render={({ field, fieldState }) => (
-                                <Field
-                                    orientation="responsive"
-                                    data-invalid={fieldState.invalid}
+                            render={({ field }) => (
+                                <Select
+                                    value={
+                                        field.value ? String(field.value) : ""
+                                    }
+                                    onValueChange={(v) =>
+                                        field.onChange(Number(v))
+                                    }
                                 >
-                                    <FieldContent>
-                                        <FieldLabel htmlFor="form-rhf-select-language">
-                                            Category
-                                        </FieldLabel>
-                                        <FieldDescription>
-                                            For best results, select the
-                                            language you speak.
-                                        </FieldDescription>
-                                        {fieldState.invalid && (
-                                            <FieldError
-                                                errors={[fieldState.error]}
-                                            />
-                                        )}
-                                    </FieldContent>
-                                    <Select
-                                        name={field.name}
-                                        value={field.value}
-                                        onValueChange={field.onChange}
-                                    >
-                                        <SelectTrigger
-                                            id="form-rhf-select-language"
-                                            aria-invalid={fieldState.invalid}
-                                            className="min-w-30"
-                                        >
-                                            <SelectValue placeholder="Select" />
-                                        </SelectTrigger>
-                                        <SelectContent position="item-aligned">
-                                            <SelectItem value="auto">
-                                                Auto
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select category" />
+                                    </SelectTrigger>
+
+                                    <SelectContent>
+                                        {categories.map((cat) => (
+                                            <SelectItem
+                                                key={cat.id}
+                                                value={String(cat.id)}
+                                            >
+                                                {cat.name}
                                             </SelectItem>
-                                            <SelectSeparator />
-                                            {productCategory.map((category) => (
-                                                <SelectItem
-                                                    key={category.value}
-                                                    value={category.value}
-                                                >
-                                                    {category.label}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </Field>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             )}
                         />
+
                         <Controller
                             name="image"
                             control={form.control}
@@ -249,15 +298,8 @@ export function ProductForm() {
                                     data-invalid={fieldState.invalid}
                                 >
                                     <FieldContent>
-                                        <FieldLabel>
-                                            Upload the Product Image
-                                        </FieldLabel>
-
                                         <ImageUpload
-                                            value={field.value}
-                                            onChange={(
-                                                file: File | undefined,
-                                            ) => field.onChange(file)}
+                                            onImagesChange={onhandleImageChange}
                                         />
 
                                         {fieldState.invalid && (

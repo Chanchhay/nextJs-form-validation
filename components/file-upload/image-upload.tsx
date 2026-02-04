@@ -36,8 +36,6 @@ interface ImageUploadProps {
     className?: string;
     onImagesChange?: (images: ImageFile[]) => void;
     onUploadComplete?: (images: ImageFile[]) => void;
-    value?: File;
-    onChange: (file?: File) => void;
 }
 
 export default function ImageUpload({
@@ -84,6 +82,8 @@ export default function ImageUpload({
         if (images.length >= maxFiles) {
             return `Maximum ${maxFiles} files allowed`;
         }
+
+        console.log(file)
         return null;
     };
 
@@ -257,7 +257,7 @@ export default function ImageUpload({
                         >
                             <img
                                 src={defaultImg.src}
-                                className="h-30 w-full object-cover rounded-md"
+                                className="h-[120px] w-full object-cover rounded-md"
                                 alt={defaultImg.alt}
                             />
 
@@ -284,7 +284,7 @@ export default function ImageUpload({
                             >
                                 <img
                                     src={imageFile.preview}
-                                    className="h-30 w-full object-cover rounded-md"
+                                    className="h-[120px] w-full object-cover rounded-md"
                                     alt={`Product view ${index + 1}`}
                                 />
 
@@ -326,7 +326,7 @@ export default function ImageUpload({
                     <span className="text-xs text-secondary-foreground font-normal block mb-3">
                         JPEG, PNG, up to {formatBytes(maxSize)}.
                     </span>
-                    <Button size="sm" variant="link" onClick={openFileDialog}>
+                    <Button size="sm" variant="mono" onClick={openFileDialog}>
                         Browse File
                     </Button>
                 </CardContent>
